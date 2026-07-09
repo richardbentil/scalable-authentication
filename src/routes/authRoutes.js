@@ -8,11 +8,14 @@ const router = express.Router();
 router.post('/register', getIpAddress, register);
 router.post('/login', getIpAddress, login);
 router.post('/refresh-token', refreshToken);
+router.get('/admin', withAuth('admin'), (req, res) => {
+    res.status(200).json({ message: 'Access granted' });
+});
 router.post('/logout', (req, res) => {
     res.clearCookie('access_token');
     res.clearCookie('refresh_token');
     res.status(200).json({ message: 'Logged out successfully' });
 });
-router.get('/me', withAuth, getProfile);
+router.get('/me', withAuth(), getProfile);
 
 export default router;

@@ -18,17 +18,19 @@ const signup = async (userData) => {
     const passwordHash = await bcrypt.hash(userData.password, 10);
     const newUser = await usersCollection.insertOne({
         email: userData.email,
+        role: userData.role || 'user',
         password: passwordHash
     });
 
     // create auth tokens for the new user
-    const createdUser = { id: newUser.insertedId, email: userData.email };
-    const accessToken = setAccessToken({ ...createdUser, ipAddress: userData.ipAddress });
+    const createdUser = { id: newUser.insertedId, email: userData.email, role: userData.role || 'user' };
+    const accessToken = setAccessToken({ ...createdUser, role: userData.role || 'user', ipAddress: userData.ipAddress });
     const refreshTokenResult = await setRefreshToken({ ...createdUser, ipAddress: userData.ipAddress });
 
     return {
         id: createdUser.id,
         email: createdUser.email,
+        role: createdUser.role,
         access_token: accessToken,
         refresh_token: refreshTokenResult.token
     };
@@ -55,6 +57,7 @@ const login = async (userData) => {
     const accessToken = setAccessToken({
         id: existingUser._id,
         email: existingUser.email,
+        role: existingUser.role || 'user',
         ipAddress: userData.ipAddress
     });
     const refreshTokenResult = await setRefreshToken({
@@ -74,7 +77,15 @@ const login = async (userData) => {
 // issue a new access token using a valid refresh token
 const refreshAccessToken = async (refreshTokenValue) => {
     const tokenRecord = await verifyRefreshToken(refreshTokenValue);
-    const newAccessToken = setAccessToken({ id: tokenRecord.userId });
+    const db = await connectDB();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ _id: tokenRecord.userId });
+
+    const newAccessToken = setAccessToken({
+        id: user?._id || tokenRecord.userId,
+        email: user?.email,
+        role: user?.role || 'user'
+    });
 
     return { access_token: newAccessToken };
 };
@@ -97,7 +108,8 @@ const getUserProfile = async (userId) => {
 
     return {
         id: user._id,
-        email: user.email
+        email: user.email,
+        role: user.role || 'user'
     };
 };
 

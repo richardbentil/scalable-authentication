@@ -6,7 +6,8 @@ import { saveRefreshToken, findRefreshToken } from '../repositories/refreshToken
 const setAccessToken = (userData) => {
     const payload = {
         email: userData.email,
-        id: userData.id || userData._id
+        id: userData.id || userData._id,
+        role: userData.role || 'user'
     };
 
     return jwt.sign(payload, process.env.JWT_SECRET, {
