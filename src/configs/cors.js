@@ -10,7 +10,7 @@ const corsOptions = {
 };
 
 // CORS middleware function
-const corsMiddleware = cors(corsOptions);
+export const corsMiddleware = cors(corsOptions);
 
 
 

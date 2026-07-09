@@ -1,70 +1,104 @@
 import bcrypt from 'bcrypt';
-import { connectDB } from '../config/db.js';
+import { ObjectId } from 'mongodb';
+import { connectDB } from '../configs/db.js';
+import { setAccessToken, setRefreshToken, verifyRefreshToken } from '../configs/tokens.js';
 
+// register a new user and issue both access and refresh tokens
 const signup = async (userData) => {
-    let db = await connectDB();
+    const db = await connectDB();
     const usersCollection = db.collection('users');
-    // 1. check if user exists in the database
+
+    // check whether the email already exists
     const existingUser = await usersCollection.findOne({ email: userData.email });
     if (existingUser) {
         throw new Error('User already exists');
     }
 
-    // 2. create new user account
-        // 1. hash password
-        const passwordHash = await bcrypt.hash(userData.password, 10);
-        // 2. save user to database
-        const newUser = await usersCollection.insertOne({
-            email: userData.email,
-            password: passwordHash
-        });
+    // hash the password and save the new user
+    const passwordHash = await bcrypt.hash(userData.password, 10);
+    const newUser = await usersCollection.insertOne({
+        email: userData.email,
+        password: passwordHash
+    });
 
-    // 3. set jwt token
-        const accessToken = setAccessToken({...newUser, ipAddress: userData.ipAddress});
-        const refreshToken = setRefreshToken({...newUser, ipAddress: userData.ipAddress});
+    // create auth tokens for the new user
+    const createdUser = { id: newUser.insertedId, email: userData.email };
+    const accessToken = setAccessToken({ ...createdUser, ipAddress: userData.ipAddress });
+    const refreshTokenResult = await setRefreshToken({ ...createdUser, ipAddress: userData.ipAddress });
 
-    // 4. set cookies 
-        setCookie(res, 'access_token', accessToken);
-        setCookie(res, 'refresh_token', refreshToken);
-
-    // 5. return user data
     return {
-        id: newUser.insertedId,
-        email: newUser.email,
+        id: createdUser.id,
+        email: createdUser.email,
         access_token: accessToken,
-        refresh_token: refreshToken
+        refresh_token: refreshTokenResult.token
     };
 };
 
+// authenticate an existing user and issue both access and refresh tokens
 const login = async (userData) => {
-    let db = await connectDB();
+    const db = await connectDB();
     const usersCollection = db.collection('users');
-    // 1. check if user exists in the database
+
+    // find the user by email
     const existingUser = await usersCollection.findOne({ email: userData.email });
     if (!existingUser) {
         throw new Error('Invalid credentials');
     }
-    // 2. validate password
+
+    // validate the password
     const isPasswordValid = await bcrypt.compare(userData.password, existingUser.password);
     if (!isPasswordValid) {
         throw new Error('Invalid credentials');
     }
-    // 3. set jwt token
-    
-    const accessToken = setAccessToken({...existingUser, ipAddress: userData.ipAddress});
-    const refreshToken = setRefreshToken({...existingUser, ipAddress: userData.ipAddress});
 
-    // 4. set cookies 
-    setCookie(res, 'access_token', accessToken);
-    setCookie(res, 'refresh_token', refreshToken);
+    // create access and refresh tokens for the authenticated user
+    const accessToken = setAccessToken({
+        id: existingUser._id,
+        email: existingUser.email,
+        ipAddress: userData.ipAddress
+    });
+    const refreshTokenResult = await setRefreshToken({
+        id: existingUser._id,
+        email: existingUser.email,
+        ipAddress: userData.ipAddress
+    });
 
-    // 5. return user data
     return {
         id: existingUser._id,
         email: existingUser.email,
         access_token: accessToken,
-        refresh_token: refreshToken
+        refresh_token: refreshTokenResult.token
     };
 };
 
-export { signup, login };
+// issue a new access token using a valid refresh token
+const refreshAccessToken = async (refreshTokenValue) => {
+    const tokenRecord = await verifyRefreshToken(refreshTokenValue);
+    const newAccessToken = setAccessToken({ id: tokenRecord.userId });
+
+    return { access_token: newAccessToken };
+};
+
+// fetch the authenticated user's profile from the database
+const getUserProfile = async (userId) => {
+    const db = await connectDB();
+    const usersCollection = db.collection('users');
+
+    const query = {
+        _id: typeof userId === 'string' && ObjectId.isValid(userId)
+            ? new ObjectId(userId)
+            : userId
+    };
+
+    const user = await usersCollection.findOne(query);
+    if (!user) {
+        throw new Error('User not found');
+    }
+
+    return {
+        id: user._id,
+        email: user.email
+    };
+};
+
+export { signup, login, refreshAccessToken, getUserProfile };
