@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { runWithRequestContext } from '../utils/requestContext.js';
 
 const withAuth = (requiredRole = null) => {
     return (req, res, next) => {
@@ -18,7 +19,10 @@ const withAuth = (requiredRole = null) => {
             }
 
             req.user = decoded;
-            next();
+
+            runWithRequestContext({ user: decoded }, () => {
+                next();
+            });
         });
     };
 };

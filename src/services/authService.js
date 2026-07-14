@@ -1,22 +1,19 @@
 import bcrypt from 'bcrypt';
 import { ObjectId } from 'mongodb';
-import { connectDB } from '../configs/db.js';
+import { findOne, insertOne } from '../repositories/baseRepository.js';
 import { setAccessToken, setRefreshToken, verifyRefreshToken } from '../configs/tokens.js';
 
 // register a new user and issue both access and refresh tokens
 const signup = async (userData) => {
-    const db = await connectDB();
-    const usersCollection = db.collection('users');
-
     // check whether the email already exists
-    const existingUser = await usersCollection.findOne({ email: userData.email });
+    const existingUser = await findOne('users', { email: userData.email });
     if (existingUser) {
         throw new Error('User already exists');
     }
 
     // hash the password and save the new user
     const passwordHash = await bcrypt.hash(userData.password, 10);
-    const newUser = await usersCollection.insertOne({
+    const newUser = await insertOne('users', {
         email: userData.email,
         role: userData.role || 'user',
         password: passwordHash
@@ -38,11 +35,8 @@ const signup = async (userData) => {
 
 // authenticate an existing user and issue both access and refresh tokens
 const login = async (userData) => {
-    const db = await connectDB();
-    const usersCollection = db.collection('users');
-
     // find the user by email
-    const existingUser = await usersCollection.findOne({ email: userData.email });
+    const existingUser = await findOne('users', { email: userData.email });
     if (!existingUser) {
         throw new Error('Invalid credentials');
     }
@@ -77,9 +71,8 @@ const login = async (userData) => {
 // issue a new access token using a valid refresh token
 const refreshAccessToken = async (refreshTokenValue) => {
     const tokenRecord = await verifyRefreshToken(refreshTokenValue);
-    const db = await connectDB();
-    const usersCollection = db.collection('users');
-    const user = await usersCollection.findOne({ _id: tokenRecord.userId });
+  
+    const user = await findOne('users', { _id: tokenRecord.userId });
 
     const newAccessToken = setAccessToken({
         id: user?._id || tokenRecord.userId,
@@ -92,16 +85,8 @@ const refreshAccessToken = async (refreshTokenValue) => {
 
 // fetch the authenticated user's profile from the database
 const getUserProfile = async (userId) => {
-    const db = await connectDB();
-    const usersCollection = db.collection('users');
+    const user = await findOne('users', { _id: userId });
 
-    const query = {
-        _id: typeof userId === 'string' && ObjectId.isValid(userId)
-            ? new ObjectId(userId)
-            : userId
-    };
-
-    const user = await usersCollection.findOne(query);
     if (!user) {
         throw new Error('User not found');
     }
